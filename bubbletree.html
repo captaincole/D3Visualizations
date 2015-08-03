@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html>
+<head lang="en">
+    <meta charset="UTF-8">
+    <title></title>
+</head>
+<link href='https://fonts.googleapis.com/css?family=Open+Sans:400,300,700' rel='stylesheet' type='text/css'>
+<style>
+    .onoffswitch {
+        position: relative; width: 120px;
+        margin-left: 2px;
+        -webkit-user-select:none; -moz-user-select:none; -ms-user-select: none;
+    }
+    .onoffswitch-checkbox {
+        display: none;
+    }
+    .onoffswitch-label {
+        display: block; overflow: hidden; cursor: pointer;
+        border: 2px solid #999999; border-radius: 20px;
+    }
+    .onoffswitch-inner {
+        display: block; width: 200%; margin-left: -100%;
+        -moz-transition: margin 0.3s ease-in 0s; -webkit-transition: margin 0.3s ease-in 0s;
+        -o-transition: margin 0.3s ease-in 0s; transition: margin 0.3s ease-in 0s;
+    }
+    .onoffswitch-inner:before, .onoffswitch-inner:after {
+        display: block; float: left; width: 50%; height: 25px; padding: 0; line-height: 25px;
+        font-size: 14px; color: white; font-family: Trebuchet, Arial, sans-serif; font-weight: bold;
+        -moz-box-sizing: border-box; -webkit-box-sizing: border-box; box-sizing: border-box;
+    }
+    .onoffswitch-inner:before {
+        content: "Deliquency";
+        padding-left: 10px;
+        background-color: #D53E20; color: #FFFFFF;
+    }
+    .onoffswitch-inner:after {
+        content: "Deviation";
+        padding-right: 10px;
+        background-color: #005272; color: #FFFFFF;
+        text-align: right;
+    }
+    .onoffswitch-switch {
+        display: block; width: 18px; margin: 6px;
+        background: #FFFFFF;
+        border: 2px solid #999999; border-radius: 20px;
+        position: absolute; top: 0; bottom: 0; right: 76px;
+        -moz-transition: all 0.3s ease-in 0s; -webkit-transition: all 0.3s ease-in 0s;
+        -o-transition: all 0.3s ease-in 0s; transition: all 0.3s ease-in 0s;
+    }
+    .onoffswitch-checkbox:checked + .onoffswitch-label .onoffswitch-inner {
+        margin-left: 0;
+    }
+    .onoffswitch-checkbox:checked + .onoffswitch-label .onoffswitch-switch {
+        right: 0px;
+    }
+    .axis text {
+        font: 10px sans-serif;
+    }
+
+    .axis path,
+    .axis line {
+        fill: none;
+        stroke: #000;
+        shape-rendering: crispEdges;
+    }
+
+    form {
+        position: absolute;
+        right: 10px;
+        top: 10px;
+    }
+
+    .blocknode{
+        border: solid 1px white;
+        font: 10px sans-serif;
+        line-height: 12px;
+        overflow: hidden;
+        position: absolute;
+        text-indent: 2px;
+    }
+    #treemapContainter {
+        padding-top: 20px;
+        float:right;
+    }
+    .slider .handle {
+        fill: #fff;
+        stroke: #000;
+        stroke-opacity: .5;
+        stroke-width: 1.25px;
+        cursor: crosshair;
+    }
+</style>
+<body>
+<svg id="bubbleChart"></svg>
+<div id="treemapContainter">
+    <div id="treemap"></div>
+</div>
+<div id="table"></div>
+</body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.js"></script>
+<script src="https://code.jquery.com/jquery-1.11.2.js" charset="utf-8"></script>
+
+<script>
+
+    var data;
+    var clusterData = [];
+
+    /* Set Mappings for Deliquency and Age */
+    var DelinquencyType = ["Low" , "Low-Moderate" , "Moderate" , "Moderate-High" , "High"];
+    var AgeType = ["Not Yet Due" , "1-30 Days Past Due" , "31-60 Days Past Due", "61-90 Days Past Due" , "90+ Days Past Due"];
+
+    /* Data Loading */
+    d3.csv('dataset2.csv' , function(d) {
+        return {
+
+            /* Assign Row Names to JSON Values */
+            name: d.CompanyName,
+            id: d.CompanyID,
+            delinquency: d.DelinquencyRisk,
+            age: d.Aging,
+            amount: d.Amount,
+            invoiceNumber: d.InvoiceNumber,
+            grid: d.GridPosition
+        };
+    } , function (error , rows) {
+
+        /* data object */
+        data = rows;
+        console.log(rows);
+
+        initiateChart();
+    });
+
+    function initiateChart() {
+
+        /* Massage Data */
+        // ar clusterData = [];
+
+        // Create Cluster Data
+        $.each( DelinquencyType , function(index , delinq) {
+            $.each( AgeType , function (index2 , age) {
+                var cluster = {};
+                var clusterTotal = 0;
+
+                // find data that matches the specific cluster
+                $.each( data , function(i , d) {
+                    if (d.delinquency === delinq && d.age === age) {
+                        if (d.amount !== undefined) {
+                            if ( cluster.hasOwnProperty(d.name)) {
+                                clusterTotal += parseInt(d.amount);
+                                cluster[d.name] += parseInt(d.amount);
+                            } else {
+                                cluster[d.name] = 0;
+                                cluster[d.name] += parseInt(d.amount);
+                                clusterTotal += parseInt(d.amount);
+                            }
+                        }
+                    }
+                });
+
+                // Put Object into Array
+                var sort_array = [];
+                for (var key in cluster) {
+                    sort_array.push({ name:key , amount:cluster[key] });
+                }
+
+                // Sort in descending order
+                sort_array.sort(function(x, y) {
+                    return y.amount - x.amount;
+                });
+
+                // Calculate % of the max customer
+                var maxPercent = parseInt( 100 * ( sort_array[0].amount / clusterTotal) , 10);
+
+                // Construct cluster info
+                clusterData.push({ delinquency: delinq , age: age, customers: sort_array, percent: maxPercent, amount: clusterTotal});
+
+            });
+        });
+
+        $.each(clusterData , function(index) {
+            console.log(clusterData[index]);
+        });
+
+        // Summerize the data into clusters
+        var height = 500,
+                width = 500,
+                margin = { left:75 , right:25, top:50, bottom:50 };
+
+        var bubbles = d3.select('#bubbleChart')
+                .attr('height', height + margin.bottom + margin.top)
+                .attr('width' , width + margin.left + margin.right);
+
+        console.log("Maximum Amount: " + d3.max(data , function (d) { return d.amount; }));
+
+        /* Scale for the radius of the bubbles */
+        var rScale = d3.scale.linear()
+                .domain([ 0 , d3.max(clusterData , function(d) { return d.amount; }) ])
+                .range([ 10 , 45]);
+
+        var xScale = d3.scale.ordinal()
+                .domain( AgeType)
+                .rangeRoundBands([margin.left -25  , width + margin.left]);
+
+        var yScale = d3.scale.ordinal()
+                .domain( DelinquencyType)
+                .rangeBands([ height , margin.bottom]);
+
+        var colorScale = d3.scale.threshold()
+                .domain([ 0 , d3.max(clusterData, function(d) { return d.amount})])
+                .range(['red' , 'blue' , 'green']);
+
+        var xAxis = d3.svg.axis()
+                .scale(xScale)
+                .orient("bottom");
+
+        var yAxis = d3.svg.axis()
+                .scale(yScale)
+                .orient("left");
+
+        var arguments = { "xAxis": xAxis , "yAxis": yAxis ,
+                          "rScale" : rScale , "colorScale":colorScale,
+                          "svg":bubbles , "margin": margin , "xScale":xScale , "yScale":yScale,
+                          "height": height, "width": width };
+
+        bubbleChart( arguments );
+
+        var args = { treeData: formatTreeData({ multiIndex:['all']}), delinquency: DelinquencyType[4] , age: AgeType[4] };
+        treeMap( args );
+
+    }
+
+    function bubbleChart ( args ) {
+
+        /* Validate Arguments */
+        if (!args.hasOwnProperty("svg")) {
+            throw "No Svg Selected for Bubble Chart";
+        }
+        if (!args.hasOwnProperty("rScale")) {
+            throw "No Scale for Bubbles";
+        }
+
+        addSlider(args.svg);
+
+        args.svg.append('text')
+                .text('Threshold :')
+                .style('font','Open-Sans')
+                .style('font-size','12px')
+                .attr('transform', 'translate(' + 10 + ',' + 555 + ')');
+
+        args.svg.append('g')
+                .attr('class' , 'x axis')
+                .attr('transform' , 'translate( ' + args.margin.right + ',' + args.height + ')')
+                .call(args.xAxis);
+
+        args.svg.append('g')
+                .attr('class' , 'y axis')
+                .attr('transform' , 'translate(' + args.margin.left + ',  0)')
+                .call(args.yAxis);
+
+        args.svg.selectAll('.node')
+                .data(clusterData)
+                .enter()
+                .append('circle')
+                .attr('class' , 'node')
+                .attr('cx' , function(d) { return args.xScale(d.age) + 77; })
+                .attr('cy' , function(d) { return args.yScale(d.delinquency) + 40; })
+                .attr('r' , function(d) {
+                    return args.rScale(d.amount);
+                }).attr('opacity' , '.85')
+                .on('mouseover', function(d) {
+                    createTooltip(this , d);
+                }).on('mouseout', function(d, i) {
+                    // Remove Tooltip when the user removes the mouse
+                    d3.select('body').selectAll('.tooltip-custom')
+                            .remove();
+                }).on('click' , function(d) {
+
+                    if (d.hasOwnProperty('isClicked') && d.isClicked) {
+                        // Is Clicked already, deselects node
+                        updateTreeMap({'node': 'all'});
+                        d3.select(this)
+                                .attr('stroke-width', '0px');
+                        d.isClicked = false;
+
+                    } else {
+                        // Deselect All Nodes
+                        d3.selectAll('.node')
+                                .attr('stroke-width' , '0px');
+
+                        // Select just this node
+                        d.isClicked = true;
+                        updateTreeMap({'node': d});
+                        d3.select(this)
+                                .attr('stroke', '#bdbdbd')
+                                .attr('stroke-width', '2px');
+                    }
+                });
+
+        // Set color codes for status Green, Yellow, and Red
+        var colors = { red: '#d7301f' , yellow:'#fc8d59', green:'#fdcc8a'};
+        var color5a = [ '#fdd49e', '#fdbb84' , '#fc8d59' , '#e34a33' , '#b30000'];
+
+        d3.selectAll('.node')
+                .each( function(d) {
+                    if (d.percent > 45) {
+                        return pulse(this);
+                    } else {
+                        return unPulse(this);
+                    }
+                }).attr('fill' , function(d) {
+                    var temp = parseInt(AgeType.indexOf(d.age) + DelinquencyType.indexOf(d.delinquency));
+
+                    // Custom Color scale, instead of using a scale. This is more specific
+                    if (temp < 2) {
+                        return color5a[0];
+                    } else if (temp < 4) {
+                        return color5a[1];
+                    } else if (temp < 5 ) {
+                        return color5a[2];
+                    } else if (temp < 7 ) {
+                        return color5a[3];
+                    } else if ( temp < 9) {
+                        return '#FF0000';
+                    } else {
+                        return color5a[4];
+                    }
+                });
+    }
+
+    function treeMap( args ) {
+
+        var height = 500,
+            width = 500,
+            margin = { left: 20 , right: 20, top: 20, bottom:20 };
+
+
+        // var color = d3.scale.category10();
+
+        var colors = ['#3182bd' , '#31a354' , '#756bb1' , '#6baed6' , '#fd8d3c' , '#74c476' , '#9e9ac8'];
+
+        var color = d3.scale.ordinal().domain([0 , 1 , 2 , 3 , 4 , 5 , 6]).range(colors);
+
+        var treemap = d3.layout.treemap()
+                .size([ width , height ])
+                .sticky( true )
+                .sort( function(a , b) {
+                    // Random order
+                    return Math.random() - Math.random();
+                })
+                .value( function(d) { return d.amount } );
+
+        var treeStyles = {
+            'position':'relative',
+            'width': width + 'px',
+            'height': height + 'px'
+        };
+
+        var div = d3.select('#treemap')
+                .style(treeStyles);
+
+        var node = div.datum(args.treeData)
+                .selectAll('.blocknode')
+                .data(treemap.nodes)
+                .enter()
+                .append('div')
+                .attr('class', 'blocknode')
+                .on('click' , function(d) {
+                    if ( args.node === 'all') {
+                        dataTable({ name: d.name , delinquency: -1 , age: -1});
+                    } else {
+                        console.log(node);
+                        dataTable({ name: d.name , delinquency: args.delinquency , age: args.age });
+                    }
+                })
+                .call(position)
+                .style('background' , function(d , i ) {
+                    return d.children ? null : color(i % 7);
+                })
+                .text(function(d) {
+                    return d.children ? null : d.name;
+                });
+
+        function position() {
+            this.style('left' , function(d) { return d.x + 'px'; })
+                    .style('top' , function(d) { return d.y + 'px'; })
+                    .style('width' , function(d) { return Math.max(0, d.dx - 1) + 'px'; })
+                    .style('height' , function(d) { return Math.max(0 , d.dy - 1) + 'px'; });
+        }
+
+    };
+
+    function updateTreeMap( args ) {
+        // Update on Node Selection
+
+        if (!args.hasOwnProperty('node')) {
+            throw 'No Node Selected';
+        }
+
+        var height = 500,
+                width = 500,
+                margin = { left: 20 , right: 20, top: 20, bottom:20 };
+
+        // var color = d3.scale.category20c();
+
+        var colors = ['#3182bd' , '#31a354' , '#756bb1' , '#6baed6' , '#fd8d3c' , '#74c476' , '#9e9ac8'];
+
+        var color = d3.scale.ordinal().range(colors);
+
+        var treemap = d3.layout.treemap()
+                .size([ width , height ])
+                .sticky( true )
+                .sort( function(a , b) {
+                    // Random order
+                    return Math.random() - Math.random();
+                })
+                .value( function(d) { return d.amount } );
+        if (args.node === 'all') {
+            // Complete world view
+            var treeData = formatTreeData({ multiIndex:['all']});
+
+        } else {
+            var treeData = formatTreeData({
+                delinqIndex: DelinquencyType.indexOf(args.node.delinquency),
+                ageIndex: AgeType.indexOf(args.node.age)
+            });
+        }
+
+             console.log(treeData);
+            // Enter, Update, Append New Tree Data
+            var div = d3.select('#treemap');
+
+            /* Three Step Proccess */
+            // 1) Transition Current Elements
+            var node = div.datum(treeData)
+                    .selectAll('.blocknode')
+                    .data(treemap.nodes)
+                    .transition()
+                    .duration(1000)
+                    .call(position)
+                    .style('background', function (d , i ) {
+                        return d.children ? null : color( i % 7 );
+                    })
+                    .text(function (d) {
+                        return d.children ? null : d.name;
+                    });
+
+            div.datum(treeData).selectAll('.blocknode').data(treemap.nodes).exit().transition().remove();
+
+
+            // 2) Append New Elements
+            div.datum(treeData)
+                    .selectAll('.blocknode')
+                    .data(treemap.nodes)
+                    .enter()
+                    .append('div')
+                    .attr('class', 'blocknode')
+                    .transition()
+                    .duration(1000)
+                    .call(position)
+                    .style('background', function (d , i ) {
+                        return d.children ? null : color( i % 7 );
+                    })
+                    .text(function (d) {
+                        return d.children ? null : d.name;
+                    });
+            // 3) Remove Old Elements
+            // div.datum(treeData).selectAll('.blocknode').data(treemap.nodes).exit().transition().remove();
+
+            // node.transition().remove();
+
+
+            function position() {
+                this.style('left', function (d) {
+                    return d.x + 'px';
+                })
+                        .style('top', function (d) {
+                            return d.y + 'px';
+                        })
+                        .style('width', function (d) {
+                            return Math.max(0, d.dx - 1) + 'px';
+                        })
+                        .style('height', function (d) {
+                            return Math.max(0, d.dy - 1) + 'px';
+                        });
+            }
+
+            // Update on Data Change
+            // Not a feature
+    };
+
+    // Remove Pulsating
+    function unPulse(that) {
+
+        var r = d3.select(that).attr('r');
+        // Return to normal by overriding transition
+        var circle = d3.select(that)
+                .transition(1000)
+                .attr('r' , r);
+
+    }
+
+    // Add Pulsing to node
+    function pulse(that) {
+        var circle = d3.select(that);
+        var r = d3.select(that).attr('r');
+
+        (function repeat() {
+
+            circle = circle.transition()
+                    .duration(1000)
+                    .attr("r", r)
+                    .transition()
+                    .duration(1000)
+                    .attr("r", r - 5)
+                    .ease('linear')
+                    .each("end", repeat);
+
+        })();
+
+    }
+
+    function createTooltip(that , node) {
+
+        // Set tooltip styles
+        var styles = {
+            position: 'absolute',
+            top: (d3.event.pageY - 70 ) + 'px' ,
+            left: (d3.event.pageX + 20) + 'px',
+            background: 'white',
+            'z-index': '10',
+            'white-space': 'pre-wrap',
+            'border-width': '2px',
+            'border-style': 'outset',
+            padding: '10px 10px 10px 10px',
+            'border-radius': '5px',
+            'font-family': 'Open Sans',
+            'word-wrap': 'normal',
+            'font-size': '10px',
+            'opacity': '.9'
+        };
+
+        var tooltip = d3.select('body')
+                .append('div')
+                .attr('class', 'tooltip-custom')
+                .style(styles);
+
+
+        var content = 'Total Amount: $' + node.amount;
+        content += ' \n Total Customers: ' + node.customers.length;
+
+         tooltip.append('div')
+         .attr('class', 'org')
+         .text(content);
+
+    }
+
+    function formatTreeData( args ) {
+
+
+        if (args.hasOwnProperty('delinqIndex') && args.hasOwnProperty('ageIndex')) {
+            // Only one bubble selected
+
+            // Create data for first treeMap chart based on the highest delinquency and age
+            var treeData = {
+                'name': 'tree',
+                'children': []
+            };
+
+            $.each(data, function (index, value) {
+
+                // Find if it is the right delinquency and age
+                if (value.delinquency === DelinquencyType[args.delinqIndex] && value.age === AgeType[args.ageIndex]) {
+
+                    // Add the first value
+                    if (treeData.children.length === 0) {
+                        console.log('name ' + value.name);
+                        treeData.children.push({name: value.name, amount: parseInt(value.amount)});
+                    } else {
+                        // Aggregate the data based on company name
+                        var found = false;
+                        $.each(treeData.children , function(index) {
+                            // Does the customer exist? If so, aggregate the data
+                            if (treeData.children[index].name === value.name) {
+                                treeData.children[index].amount += parseInt(value.amount);
+                                found = true;
+                            }
+                        });
+                        if (!found ) {
+                            // if its gone through the whole child array and not found the customer, add an entry
+                            treeData.children.push({name: value.name, amount: parseInt(value.amount)});
+                        }
+                    }
+                }
+            });
+
+            console.log(treeData);
+
+            return treeData;
+        } else if ( args.hasOwnProperty('multiIndex') ) {
+            // Lots of repets, could make a common function
+            var treeData = {
+                'name': 'tree',
+                'children': []
+            };
+
+            if (args.multiIndex[0] === 'all') {
+                // World View, aggregate all data by company
+                $.each(data , function(index , value) {
+
+                    if (treeData.children.length === 0) {
+                        treeData.children.push({ name: value.name , amount: parseInt(value.amount)});
+                    } else {
+                        var found = false;
+                        $.each(treeData.children , function(index) {
+                            // Does the customer exist? If so, aggregate the data
+                            if (treeData.children[index].name === value.name) {
+                                treeData.children[index].amount += parseInt(value.amount);
+                                found = true;
+                            }
+                        });
+                        if (!found ) {
+                            // if its gone through the whole child array and not found the customer, add an entry
+                            treeData.children.push({name: value.name, amount: parseInt(value.amount)});
+                        }
+                    }
+                });
+            }
+
+            // console.log(treeData.children);
+            return treeData;
+
+        } else {
+            throw "No Index for tree data formating";
+        }
+
+    }
+
+    function dataTable( args ) {
+
+        var height = 500,
+                width = 500;
+
+        // Parse data
+        var catagories = ['Name' , 'ID' , 'Deliquency' , 'Age' , 'Amount'];
+
+        // 10 Rows from indexed values
+        var yScale = d3.scale.ordinal()
+                .domain([0 , 1 , 2 , 3 , 4, 5 , 6 , 7 , 8 , 9 , 10 ])
+                .range( 0 , height );
+
+        var xScale = d3.scale.ordinal()
+                .domain(catagories)
+                .range( 0 , width);
+
+        var table = d3.select('#table');
+
+        var tableData = [];
+        // Parse for real data
+        var i = 0;
+
+        console.log(args);
+        $.each( data , function( index , value ) {
+
+            if ( value.name === args.name && value.delinquency === args.delinquency && value.age === args.age ) {
+                tableData.push( value );
+                console.log( value );
+            }
+
+        });
+         console.log( tableData[0] );
+
+        var tr = table.selectAll('tr')
+                .data(tableData)
+                .enter()
+                .append('tr');
+
+        var td = tr.selectAll('td')
+                .datum(function(d) { return d.keys(); })
+                .enter()
+                .append('td');
+
+    }
+
+    function addSlider( svg ) {
+        var x = d3.scale.linear()
+                .domain([0, 100])
+                .range([0, 100])
+                .clamp(true);
+
+        // Construct brush, call brushed() on every brush event
+        var brush = d3.svg.brush()
+                .x(x)
+                .extent([0,0])
+                .on('brush' , brushed);
+
+        // Slider background, ticks, and style
+        svg.append("g")
+                .attr("class", "x axis")
+                .attr("transform", "translate(" + 80 + "," + 550 + ")")
+                .call(d3.svg.axis()
+                        .scale(x)
+                        .orient("bottom")
+                        .ticks(6)
+                        .tickFormat(function(d) { return d; })
+                        .tickSize(0)
+                        .tickPadding(12))
+                .select(".domain")
+                .select(function() { return this.parentNode.appendChild(this.cloneNode(true)); })
+                .attr("class", "halo");
+
+        // Construct slider
+        var slider = svg.append('g')
+                .attr('class', 'slider')
+                .call(brush);
+
+        slider.selectAll('.extent, .resize')
+                .remove();
+
+        // Add circular handle, place in the same location as the slider
+        var handle = slider.append("circle")
+                .attr("class", "handle")
+                .attr("transform", "translate(" + 80 + "," + 550 + ")")
+                .attr("r", 9);
+
+        slider.call(brush.event)
+                .transition()
+                .duration(750)
+                .call(brush.extent([2, 70]))
+                .call(brush.event);
+
+        function brushed() {
+
+            var value = brush.extent()[0];
+
+            if (d3.event.sourceEvent) {
+                // inverse of the mouse position in relation to the slider
+                value = x.invert(d3.mouse(this)[0] - 80);
+                brush.extent([value, value]);
+            }
+
+            handle.attr('cx', x(value));
+
+        }
+
+        addButton(svg)
+    }
+
+    // Function to add the toolbox on the left side of the screen
+    function addButton(svg) {
+
+        var foreignObject = svg.append('foreignObject')
+                .attr('width', 300)
+                .attr('height', 50)
+                .attr('x' , 200)
+                .attr('y' , 540);
+
+        var div = foreignObject.append('xhtml:body')
+                .append('div')
+                .attr('class' , 'onoffswitch');
+
+        div.append('input')
+                .attr('type', 'checkbox')
+                .attr('name', 'onoffswitch')
+                .attr('class', 'onoffswitch-checkbox')
+                .attr('id' , 'myonoffswitch')
+                .property('checked', true);
+
+
+        var label = div.append('label')
+                .attr('class', 'onoffswitch-label')
+                .attr('for', 'myonoffswitch');
+
+        label.append('span')
+                .attr('class' , 'onoffswitch-inner');
+
+        label.append('span')
+                .attr('class', 'onoffswitch-switch');
+
+        d3.select('input')
+                .on('change', function() {
+                    toggleColors();
+                    // togglePulse();
+                });
+
+        // addLabel();
+    }
+
+
+</script>
+</html>
